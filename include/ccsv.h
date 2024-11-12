@@ -44,6 +44,7 @@ struct CCSV_Column {
 //lexer 
 typedef enum __internal_ccsv_tokkind __internal_ccsv_tokkind;
 typedef struct __internal_ccsv_lexer __internal_ccsv_lexer;
+typedef struct __internal_ccsv_token __internal_ccsv_token; 
 #define TOK_LIST \
   X(Iden) \
   X(Comma) \
@@ -55,6 +56,12 @@ enum __internal_ccsv_tokkind {
   #undef X
 };
 
+struct __internal_ccsv_token {
+  size_t start_idx;
+  size_t len;
+  __internal_ccsv_tokkind kind;
+};
+
 #define SHORTED(X) __internal_ccsv_##X
 
 struct __internal_ccsv_lexer {
@@ -63,7 +70,7 @@ struct __internal_ccsv_lexer {
   size_t idx;
 };
 
-__internal_ccsv_tokkind lex(__internal_ccsv_lexer* state);
+__internal_ccsv_token lex(__internal_ccsv_lexer* state);
 //parser
 
 //main stuff
@@ -84,46 +91,80 @@ const char* CCSV_errstr[] = {
 #undef ERR
 };
 
-void lex_numbers(__internal_ccsv_lexer* state, unsigned char* c) {
-  state->idx++;
-  while(isdigit(*c) && *c != '\0') { 
-    state->idx++;
-    *c = state->src[state->idx];
-  }
-  if(*c == '.') {
-   while(isdigit(*c) && *c != '\0') {
-    state->idx++;
-    *c = state->src[state->idx];
-   }
-  }
-} 
-
-__internal_ccsv_tokkind lex(__internal_ccsv_lexer* state){
+size_t lex_numbers(__internal_ccsv_lexer *state) {
+  size_t start = state->idx;
   unsigned char c = state->src[state->idx];
-  switch(c) {
-    case 'a' ... 'z':
-    case 'A' ... 'Z':
-    case '_':
+  while (isdigit(c) && c != '\0') { 
+    state->idx++;
+    c = state->src[state->idx];
+  }
+  if (c == '.') {
+    state->idx++;
+    c = state->src[state->idx];
+    while (isdigit(c) && c != '\0') {
       state->idx++;
-      while(isalnum(c) && c != '\0') {
+      c = state->src[state->idx];
+    }
+  }
+  return state->idx - start;
+}
+
+
+ __internal_ccsv_token lex(__internal_ccsv_lexer *state) {
+    unsigned char c = state->src[state->idx];
+
+    while (c == ' ' || c == '\t' || c == '\n') {
         state->idx++;
         c = state->src[state->idx];
-      }
-    return SHORTED(kind_Iden);
-    case '0' ... '9':
-      lex_numbers(state, &c);
-      return SHORTED(kind_Number);
-    case '.':
-      state->idx++;
-      if(isdigit(c) && c != '\0') {
-        lex_numbers(state, &c);
-        return SHORTED(kind_Number);
-      }
-      return SHORTED(kind_Comma);
-   default:
-      return SHORTED(kind_Comma);
-  }
-};
+    }
+
+    switch (c) {
+        case 'a' ... 'z': // Fallthrough
+        case 'A' ... 'Z': // Fallthrough
+        case '_': {
+          size_t start = state->idx;
+          do {
+            state->idx++;
+            c = state->src[state->idx];
+          } while ((isalnum(c) || c == '_') && c != '\0');
+          __internal_ccsv_token tok = (__internal_ccsv_token) {
+            .start_idx = start, 
+            .kind = __internal_ccsv_kind_Iden,
+            .len = state->idx
+          };
+          return tok;
+        } break;
+        case '0' ... '9': {
+          size_t start = state->idx;
+          size_t len = lex_numbers(state);
+          __internal_ccsv_token tok = (__internal_ccsv_token) {
+            .start_idx = start,
+            .kind = __internal_ccsv_kind_Number,
+            .len = len
+          };
+          return tok;
+        } break;
+        case ',': {
+          size_t idx = state->idx;
+          state->idx++;
+          __internal_ccsv_token tok = (__internal_ccsv_token) {
+            .start_idx = idx,
+            .len = 1,
+            .kind = __internal_ccsv_kind_Comma
+          };
+          return tok;
+        } break;
+        default: {
+           state->idx++;
+          __internal_ccsv_token tok = (__internal_ccsv_token) {
+            .start_idx = state->idx - 1,
+            .kind = __internal_ccsv_kind_Comma,
+            .len = state->idx
+          };
+          return tok;
+        } break;
+    }
+}
 
 CCSV_DataFrame CCSV_parse(FILE* file){
   if (file == NULL) {

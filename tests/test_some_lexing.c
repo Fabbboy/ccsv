@@ -10,10 +10,13 @@ int main() {
     .idx = 0,
   };
 
-  __internal_ccsv_tokkind tok = lex(&state);
-  printf("%d\n", tok);
+  __internal_ccsv_token tok = lex(&state);
+  printf("%d\n", tok.kind);
+  printf("%.*s\n", (int)tok.len, &state.src[tok.start_idx]);
   tok = lex(&state);
-  printf("%d\n", tok);
+  printf("%d\n", tok.kind);
+  printf("%.*s\n", (int)tok.len, &state.src[tok.start_idx]);
   tok = lex(&state);
-  printf("%d\n", tok);
+  printf("%d\n", tok.kind);
+  printf("%.*s\n", (int)tok.len, &state.src[tok.start_idx]);
 }
